@@ -8,21 +8,24 @@
 #include <stdlib.h>
 
 static int shoulder = 0, elbow = 0;
+static int shoulderY = 0;
+static int wrist = 0;
 
 // Jari A, B, C
 // Jari 1
-int f1A = 0, f1B = 0, f1C = 0;
+static int f1A = 0, f1B = 0, f1C = 0;
 // Jari 2
-int f2A = 0, f2B = 0, f2C = 0;
+static int f2A = 0, f2B = 0, f2C = 0;
 // Jari 3
-int f3A = 0, f3B = 0, f3C = 0;
+static int f3A = 0, f3B = 0, f3C = 0;
 // Jari 4
-int f4A = 0, f4B = 0, f4C = 0;
+static int f4A = 0, f4B = 0, f4C = 0;
 // Ibu Jari 
-int f5A = 0, f5B = 0;
+static int f5A = 0, f5B = 0;
 
 void init(void) {
     glClearColor(0, 0, 0, 0);
+    glEnable(GL_DEPTH_TEST);
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 }
 
@@ -62,13 +65,13 @@ void drawFinger(float y, int A, int B, int C)
 void drawThumb()
 {
     glPushMatrix();
-    glTranslatef(0.0, 0.8, 0);
+    glTranslatef(0.0, 0.6, 0);
     glRotatef(50, 0, 0, 1);
 
     // A
     glRotatef(f5A, 0, 0, 1);
     glPushMatrix();
-    glScalef(0.4, 0.1, 0.1);
+    glScalef(0.5, 0.12, 0.12);
     glutWireCube(1);
     glPopMatrix();
 
@@ -76,7 +79,7 @@ void drawThumb()
     glTranslatef(0.4, 0, 0);
     glRotatef(f5B, 0, 0, 1);
     glPushMatrix();
-    glScalef(0.3, 0.1, 0.1);
+    glScalef(0.4, 0.12, 0.12);
     glutWireCube(1);
     glPopMatrix();
 
@@ -85,10 +88,11 @@ void drawThumb()
 
 // Display
 void display(void) {
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glPushMatrix();
         glTranslatef(-1.0, 0, 0);
+        glRotatef((GLfloat)shoulderY, 0, 1, 0);
         glRotatef((GLfloat)shoulder, 0, 0, 1);
         glTranslatef(1.0, 0, 0);
 
@@ -108,6 +112,10 @@ void display(void) {
         glutWireCube(1);
     glPopMatrix();
     glTranslatef(1.1, 0, 0);
+
+    // Rotasi Telapak
+    glRotatef((GLfloat)wrist, 0, 1, 0);
+    glRotatef(wrist * 0.5, 0, 0, 1);
 
     glPushMatrix();
         glScalef(1.5, 1.5, 0.5);
@@ -251,6 +259,22 @@ void keyboard(unsigned char key, int x, int y)
         break;
     case 'L': 
         if(f5B > 0) f5B -= 5; 
+        break;
+
+    // Bahu
+    case 'y':
+        shoulderY = (shoulderY + 5) % 360;
+        break;
+    case 'Y':
+        shoulderY = (shoulderY - 5 + 360) % 360;
+        break;
+
+    // Telapak Tangan
+    case 't':
+        wrist = (wrist + 5) % 360;
+        break;
+    case 'T':
+        wrist = (wrist - 5 + 360) % 360;
         break;
 
     // Genggam Semua Jari
