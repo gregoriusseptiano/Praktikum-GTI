@@ -31,8 +31,8 @@
 #define WINDOW_W 1280
 #define WINDOW_H 720
 #define FOV 75.0f
-#define MOVE_SPEED 0.08f
-#define BALDI_SPEED_BASE 0.025f
+#define MOVE_SPEED 4.0f
+#define BALDI_SPEED_BASE 1.2f
 #define MOUSE_SENS 0.15f
 
 #define MAP_W 16
@@ -1058,7 +1058,8 @@ static void updateBaldi(float dt) {
   if (gBaldi.angry == 2)
     sp *= 1.7f;
 
-  float mx = nx * sp, mz = nz * sp;
+  float mx = nx * sp * dt;
+  float mz = nz * sp * dt;
   moveWithCollision(&gBaldi.x, &gBaldi.z, mx, mz, 0.3f);
 
   /* Update facing angle */
@@ -1092,7 +1093,7 @@ static void updatePlayer(float dt) {
 
   /* Sprinting */
   gPlayer.sprinting = (kShift && gPlayer.stamina > 0.0f) ? 1 : 0;
-  float speed = MOVE_SPEED * (gPlayer.sprinting ? 1.6f : 1.0f);
+  float speed = MOVE_SPEED * dt * (gPlayer.sprinting ? 1.6f : 1.0f);
 
   /* Stamina */
   if (gPlayer.sprinting) {
@@ -1270,7 +1271,7 @@ static void answerQuestion(int choice) {
     gHudMsgTimer = 3.0f;
     /* Baldi hears this and comes */
     gBaldi.hearRadius = 20.0f; /* permanent increase */
-    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.005f;
+    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.25f;
   } else {
     /* Wrong! Baldi gets angry */
     snprintf(gHudMsg, sizeof(gHudMsg), "SALAH! Baldi makin cepat!");
@@ -1280,8 +1281,8 @@ static void answerQuestion(int choice) {
     if (gBaldi.angry > 2)
       gBaldi.angry = 2;
     gBaldi.angerTimer = 8.0f;
-    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.005f +
-                   gBaldi.angry * 0.012f;
+    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.25f +
+               gBaldi.angry * 0.45f;
   }
   gShowQuestion = 0;
   gQuestionIdx = -1;
