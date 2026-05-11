@@ -1,67 +1,51 @@
-clc;
-clear;
-close all;
-
-% =====================================
-% Membaca gambar
-% =====================================
-img = imread('gambar.png');
-
-% =====================================
-% Konversi ke grayscale
-% =====================================
+% Konversi gambar ke grayscale
 if size(img,3) == 3
     gray = rgb2gray(img);
 else
     gray = img;
 end
 
+% Mengubah tipe data menjadi double
 gray = double(gray);
+% Ukuran gambar
+[m, n] = size(gray);
 
-% =====================================
-% Kernel Roberts 2x2
-% =====================================
+% Kernel Operator Roberts 2x2
 Gx = [1 0;
-      0 -1];
-
+         0 -1];
 Gy = [0 1;
-     -1 0];
+        -1 0];
 
-% =====================================
-% Proses konvolusi
-% =====================================
-Ix = conv2(gray, Gx, 'same');
-Iy = conv2(gray, Gy, 'same');
+% Menyiapkan matriks hasil
+edge = zeros(m, n);
+% Proses konvolusi manual
+for i = 1:m-1
+    for j = 1:n-1
+        % Mengambil matriks piksel 2x2
+        region = gray(i:i+1, j:j+1);
+        % Inisialisasi gradien
+        Ix = 0;
+        Iy = 0;
+        % Perkalian kernel secara manual
+        for k = 1:2
+            for l = 1:2
+                Ix = Ix + region(k,l) * Gx(k,l);
+                Iy = Iy + region(k,l) * Gy(k,l);
+            end
+        end
+        % Menghitung magnitude tepi
+        edge(i,j) = abs(Ix) + abs(Iy);
+    end
+end
 
-% =====================================
-% Menghitung magnitude tepi
-% =====================================
-edge = abs(Ix) + abs(Iy);
-
-% =====================================
-% Threshold sederhana
-% =====================================
+% Thresholding untuk mengurangi noise
 T = 50;
 edge(edge < T) = 0;
+% Normalisasi hasil edge detection
+if max(edge(:)) > 0
+   edge = uint8(255 * edge / max(edge(:)));
+else
+   edge = uint8(edge);
+end
 
-% =====================================
-% Normalisasi hasil
-% =====================================
-edge = uint8(255 * edge / max(edge(:)));
 
-% =====================================
-% Menampilkan hasil
-% =====================================
-figure;
-
-subplot(1,3,1);
-imshow(uint8(gray));
-title('Grayscale');
-
-subplot(1,3,2);
-imshow(uint8(Ix), []);
-title('Gradient X');
-
-subplot(1,3,3);
-imshow(edge);
-title('Edge Detection (Roberts)');

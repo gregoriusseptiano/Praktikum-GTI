@@ -31,8 +31,8 @@
 #define WINDOW_W 1280
 #define WINDOW_H 720
 #define FOV 75.0f
-#define MOVE_SPEED 4.0f
-#define BALDI_SPEED_BASE 1.2f
+#define MOVE_SPEED 0.08f
+#define BALDI_SPEED_BASE 0.025f
 #define MOUSE_SENS 0.15f
 
 #define MAP_W 16
@@ -40,7 +40,7 @@
 #define CELL_SIZE 2.0f
 #define WALL_HEIGHT 2.5f
 
-#define MAX_NOTEBOOKS 1
+#define MAX_NOTEBOOKS 7
 #define MAX_ITEMS 5
 #define MAX_SOUNDS 8
 
@@ -64,20 +64,20 @@ static const float COL_STAMINA[3] = {0.20f, 0.80f, 0.20f};
  * ============================================================ */
 static int map[MAP_H][MAP_W] = {
     {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-    {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 1},
+    {1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1},
+    {1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1},
+    {1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1},
+    {1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1},
+    {1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1},
+    {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1},
+    {1, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1},
+    {1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1},
+    {1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0, 1},
+    {1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1},
+    {1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1},
+    {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1},
+    {1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1},
+    {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 2, 1},
     {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
 };
 
@@ -277,8 +277,8 @@ static void generateQuestion(int notebookIdx) {
 
 static void placeNotebooks(void) {
   /* Fixed spawn spots spread around the map */
-  int sx[] = {8};
-  int sz[] = {13};
+  int sx[] = {3, 7, 11, 5, 13, 2, 9};
+  int sz[] = {2, 4, 6, 10, 3, 12, 13};
   for (int i = 0; i < MAX_NOTEBOOKS; i++) {
     gNotebooks[i].x = sx[i] * CELL_SIZE + CELL_SIZE * 0.5f;
     gNotebooks[i].z = sz[i] * CELL_SIZE + CELL_SIZE * 0.5f;
@@ -1058,8 +1058,7 @@ static void updateBaldi(float dt) {
   if (gBaldi.angry == 2)
     sp *= 1.7f;
 
-  float mx = nx * sp * dt;
-  float mz = nz * sp * dt;
+  float mx = nx * sp, mz = nz * sp;
   moveWithCollision(&gBaldi.x, &gBaldi.z, mx, mz, 0.3f);
 
   /* Update facing angle */
@@ -1093,7 +1092,7 @@ static void updatePlayer(float dt) {
 
   /* Sprinting */
   gPlayer.sprinting = (kShift && gPlayer.stamina > 0.0f) ? 1 : 0;
-  float speed = MOVE_SPEED * dt * (gPlayer.sprinting ? 1.6f : 1.0f);
+  float speed = MOVE_SPEED * (gPlayer.sprinting ? 1.6f : 1.0f);
 
   /* Stamina */
   if (gPlayer.sprinting) {
@@ -1271,7 +1270,7 @@ static void answerQuestion(int choice) {
     gHudMsgTimer = 3.0f;
     /* Baldi hears this and comes */
     gBaldi.hearRadius = 20.0f; /* permanent increase */
-    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.25f;
+    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.005f;
   } else {
     /* Wrong! Baldi gets angry */
     snprintf(gHudMsg, sizeof(gHudMsg), "SALAH! Baldi makin cepat!");
@@ -1281,8 +1280,8 @@ static void answerQuestion(int choice) {
     if (gBaldi.angry > 2)
       gBaldi.angry = 2;
     gBaldi.angerTimer = 8.0f;
-    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.25f +
-               gBaldi.angry * 0.45f;
+    gBaldi.speed = BALDI_SPEED_BASE + gPlayer.notebooksCollected * 0.005f +
+                   gBaldi.angry * 0.012f;
   }
   gShowQuestion = 0;
   gQuestionIdx = -1;
@@ -1624,9 +1623,9 @@ int main(int argc, char **argv) {
   glutKeyboardUpFunc(keyboardUp);
   glutSpecialFunc(specialKey);
   glutSpecialUpFunc(specialKeyUp);
-  // glutPassiveMotionFunc(mouseMotion);
-  // glutMotionFunc(mouseMotion);
-  // glutMouseFunc(mouseClick);
+  glutPassiveMotionFunc(mouseMotion);
+  glutMotionFunc(mouseMotion);
+  glutMouseFunc(mouseClick);
 
   printf("=== BALDI'S BASICS 3D ===\n");
   printf("FreeGLUT/OpenGL Game\n");
