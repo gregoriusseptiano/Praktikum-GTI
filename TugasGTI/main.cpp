@@ -34,6 +34,7 @@
 #define MOVE_SPEED 0.08f
 #define BALDI_SPEED_BASE 0.025f
 #define MOUSE_SENS 0.15f
+#define TARGET_FPS 60.0f
 
 #define MAP_W 16
 #define MAP_H 16
@@ -1058,7 +1059,9 @@ static void updateBaldi(float dt) {
   if (gBaldi.angry == 2)
     sp *= 1.7f;
 
-  float mx = nx * sp, mz = nz * sp;
+  float frameScale = dt * TARGET_FPS;
+  float mx = nx * sp * frameScale;
+  float mz = nz * sp * frameScale;
   moveWithCollision(&gBaldi.x, &gBaldi.z, mx, mz, 0.3f);
 
   /* Update facing angle */
@@ -1143,8 +1146,9 @@ static void updatePlayer(float dt) {
     dx /= len;
     dz /= len;
   }
-  dx *= speed;
-  dz *= speed;
+  float frameScale = dt * TARGET_FPS;
+  dx *= speed * frameScale;
+  dz *= speed * frameScale;
 
   moveWithCollision(&gPlayer.x, &gPlayer.z, dx, dz, 0.25f);
 
