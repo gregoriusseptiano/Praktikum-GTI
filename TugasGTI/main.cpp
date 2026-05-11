@@ -428,6 +428,71 @@ static void drawBox(float x, float y, float z, float sx, float sy, float sz,
   glEnd();
 }
 
+static void drawWallTexture(float wx, float wz, const float *baseCol) {
+  float x0 = wx, x1 = wx + CELL_SIZE;
+  float z0 = wz, z1 = wz + CELL_SIZE;
+  float eps = 0.006f;
+  float mortar[3] = {baseCol[0] * 0.55f, baseCol[1] * 0.55f,
+                     baseCol[2] * 0.55f};
+  float speck[3] = {baseCol[0] * 1.08f, baseCol[1] * 1.08f,
+                    baseCol[2] * 1.08f};
+
+  glLineWidth(1.0f);
+  setColor3fv(mortar);
+  glBegin(GL_LINES);
+
+  for (float y = 0.45f; y < WALL_HEIGHT; y += 0.45f) {
+    glVertex3f(x0, y, z0 - eps);
+    glVertex3f(x1, y, z0 - eps);
+    glVertex3f(x0, y, z1 + eps);
+    glVertex3f(x1, y, z1 + eps);
+    glVertex3f(x0 - eps, y, z0);
+    glVertex3f(x0 - eps, y, z1);
+    glVertex3f(x1 + eps, y, z0);
+    glVertex3f(x1 + eps, y, z1);
+  }
+
+  for (float y = 0.0f; y < WALL_HEIGHT; y += 0.45f) {
+    float offset = fmodf(y / 0.45f, 2.0f) < 1.0f ? 0.0f : 0.35f;
+    for (float p = 0.35f + offset; p < CELL_SIZE; p += 0.7f) {
+      float yTop = y + 0.45f;
+      if (yTop > WALL_HEIGHT)
+        yTop = WALL_HEIGHT;
+      glVertex3f(x0 + p, y, z0 - eps);
+      glVertex3f(x0 + p, yTop, z0 - eps);
+      glVertex3f(x0 + p, y, z1 + eps);
+      glVertex3f(x0 + p, yTop, z1 + eps);
+      glVertex3f(x0 - eps, y, z0 + p);
+      glVertex3f(x0 - eps, yTop, z0 + p);
+      glVertex3f(x1 + eps, y, z0 + p);
+      glVertex3f(x1 + eps, yTop, z0 + p);
+    }
+  }
+  glEnd();
+
+  setColor3fv(speck);
+  glBegin(GL_QUADS);
+  for (int i = 0; i < 6; i++) {
+    float px = x0 + 0.22f + fmodf((float)(i * 37), 140.0f) / 100.0f;
+    float pz = z0 + 0.18f + fmodf((float)(i * 53), 145.0f) / 100.0f;
+    float py = 0.35f + fmodf((float)(i * 29), 175.0f) / 100.0f;
+    float s = 0.025f;
+    if (px < x1 - 0.1f) {
+      glVertex3f(px - s, py - s, z0 - eps * 1.5f);
+      glVertex3f(px + s, py - s, z0 - eps * 1.5f);
+      glVertex3f(px + s, py + s, z0 - eps * 1.5f);
+      glVertex3f(px - s, py + s, z0 - eps * 1.5f);
+    }
+    if (pz < z1 - 0.1f) {
+      glVertex3f(x1 + eps * 1.5f, py - s, pz - s);
+      glVertex3f(x1 + eps * 1.5f, py - s, pz + s);
+      glVertex3f(x1 + eps * 1.5f, py + s, pz + s);
+      glVertex3f(x1 + eps * 1.5f, py + s, pz - s);
+    }
+  }
+  glEnd();
+}
+
 /* ============================================================
  *  WORLD RENDERING
  * ============================================================ */
@@ -471,6 +536,7 @@ static void renderWalls(void) {
       } else {
         drawBox(wx + CELL_SIZE * 0.5f, 0, wz + CELL_SIZE * 0.5f, CELL_SIZE,
                 WALL_HEIGHT, CELL_SIZE, wc);
+        drawWallTexture(wx, wz, wc);
         /* Add stripe near top for variety */
         float stripe[3] = {wc[0] * 0.7f, wc[1] * 0.7f, wc[2] * 0.7f};
         drawBox(wx + CELL_SIZE * 0.5f, WALL_HEIGHT - 0.15f,
