@@ -602,12 +602,26 @@ void renderPlayer(void) {
     glTranslatef(gPlayer.x, 0.0f, gPlayer.z);
     glRotatef(-gPlayer.yaw + 90.0f, 0,1,0);
 
-    /* Kaki */
-    float legSwing = sinf(gTime * 8.0f) * 0.15f;
-    glPushMatrix(); glTranslatef(-0.08f,0,0); glRotatef(legSwing*25,1,0,0);
-    drawBox(0,0,0,0.13f,0.48f,0.13f,(float[]){0.15f,0.15f,0.55f}); glPopMatrix();
-    glPushMatrix(); glTranslatef( 0.08f,0,0); glRotatef(-legSwing*25,1,0,0);
-    drawBox(0,0,0,0.13f,0.48f,0.13f,(float[]){0.15f,0.15f,0.55f}); glPopMatrix();
+    int isMoving = (kW || kS || kA || kD);
+    float swing = isMoving ? sinf(gTime * 12.0f) : 0.0f;
+
+    /* Paha kiri (diam) + betis kiri (menekuk) */
+    glPushMatrix();
+    glTranslatef(-0.08f, 0.48f, 0);
+    drawBox(0, -0.24f, 0, 0.13f, 0.24f, 0.13f, (float[]){0.10f,0.10f,0.45f}); /* paha */
+    glTranslatef(0, -0.24f, 0);
+    glRotatef(swing * 40, 1,0,0); /* lutut menekuk */
+    drawBox(0, -0.24f, 0, 0.12f, 0.24f, 0.12f, (float[]){0.10f,0.10f,0.45f}); /* betis */
+    glPopMatrix();
+
+    /* Paha kanan (diam) + betis kanan (menekuk berlawanan) */
+    glPushMatrix();
+    glTranslatef(0.08f, 0.48f, 0);
+    drawBox(0, -0.24f, 0, 0.13f, 0.24f, 0.13f, (float[]){0.10f,0.10f,0.45f}); /* paha */
+    glTranslatef(0, -0.24f, 0);
+    glRotatef(-swing * 40, 1,0,0); /* lutut menekuk berlawanan */
+    drawBox(0, -0.24f, 0, 0.12f, 0.24f, 0.12f, (float[]){0.10f,0.10f,0.45f}); /* betis */
+    glPopMatrix();
 
     /* Badan */
     drawBox(0,0.48f,0,0.36f,0.52f,0.22f,(float[]){0.15f,0.45f,0.85f});
