@@ -5,6 +5,98 @@
  */
 
 #include "game.h"
+#include <fstream>
+using namespace std;
+
+/* ============================================================
+ *  BMP LOADER (dari Praktikum 7)
+ * ============================================================ */
+struct BMPImage {
+    unsigned char *pixels;
+    int width, height;
+};
+
+static int bmpReadInt(ifstream &f) {
+    char b[4]; f.read(b,4);
+    return (int)(((unsigned char)b[3]<<24)|((unsigned char)b[2]<<16)|
+                 ((unsigned char)b[1]<<8)|(unsigned char)b[0]);
+}
+static short bmpReadShort(ifstream &f) {
+    char b[2]; f.read(b,2);
+    return (short)(((unsigned char)b[1]<<8)|(unsigned char)b[0]);
+}
+
+static BMPImage* loadBMP(const char *filename) {
+    ifstream f;
+    f.open(filename, ifstream::binary);
+    if (f.fail()) { printf("[TEXTURE] File tidak ditemukan: %s\n", filename); return NULL; }
+    char sig[2]; f.read(sig,2);
+    if (sig[0]!='B'||sig[1]!='M') { printf("[TEXTURE] Bukan file BMP: %s\n",filename); return NULL; }
+    f.ignore(8);
+    int dataOffset  = bmpReadInt(f);
+    int headerSize  = bmpReadInt(f);
+    int width=0, height=0;
+    if (headerSize==40) {
+        width  = bmpReadInt(f);
+        height = bmpReadInt(f);
+        f.ignore(2);
+        if (bmpReadShort(f)!=24) { printf("[TEXTURE] Harus 24-bit BMP: %s\n",filename); return NULL; }
+        f.ignore(4);
+    } else if (headerSize==12) {
+        width  = bmpReadShort(f);
+        height = bmpReadShort(f);
+        f.ignore(2);
+        if (bmpReadShort(f)!=24) { printf("[TEXTURE] Harus 24-bit BMP: %s\n",filename); return NULL; }
+    } else {
+        printf("[TEXTURE] Format BMP tidak dikenali: %s (header=%d)\n",filename,headerSize);
+        return NULL;
+    }
+    int bytesPerRow = ((width*3+3)/4)*4;
+    int size = bytesPerRow*height;
+    unsigned char *raw = new unsigned char[size];
+    f.seekg(dataOffset, ios_base::beg);
+    f.read((char*)raw, size);
+    f.close();
+
+    /* Konversi BGR→RGB dan flip vertikal */
+    unsigned char *pixels = new unsigned char[width*height*3];
+    for (int y=0;y<height;y++)
+        for (int x=0;x<width;x++)
+            for (int c=0;c<3;c++)
+                pixels[3*(width*y+x)+c] = raw[bytesPerRow*y+3*x+(2-c)];
+    delete[] raw;
+
+    BMPImage *img = new BMPImage();
+    img->pixels = pixels;
+    img->width  = width;
+    img->height = height;
+    printf("[TEXTURE] Loaded: %s (%dx%d)\n", filename, width, height);
+    return img;
+}
+
+static GLuint uploadTexture(BMPImage *img) {
+    if (!img) return 0;
+    GLuint id;
+    glGenTextures(1, &id);
+    glBindTexture(GL_TEXTURE_2D, id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    /* gluBuild2DMipmaps agar tekstur halus dari jauh */
+    gluBuild2DMipmaps(GL_TEXTURE_2D, GL_RGB, img->width, img->height,
+                      GL_RGB, GL_UNSIGNED_BYTE, img->pixels);
+    delete[] img->pixels;
+    delete img;
+    return id;
+}
+
+/* ============================================================
+ *  TEXTURE IDs  (0 = fallback warna solid)
+ * ============================================================ */
+static GLuint gTexWall  = 0;   /* batu bata */
+static GLuint gTexFloor = 0;   /* ubin lantai */
+static GLuint gTexCeil  = 0;   /* plafon */
 
 /* ============================================================
  *  COLORS
@@ -54,6 +146,7 @@ float       gTime         = 0.0f;
 int         gMenuSel      = 0;
 float       gFlashTimer   = 0.0f;
 int         gMouseCaptured= 0;
+int         gFirstPerson  = 0;  /* 0=third person, 1=first person */
 
 int  gShowQuestion  = 0;
 int  gQuestionIdx   = -1;
@@ -98,17 +191,28 @@ void moveWithCollision(float *cx, float *cz, float dx, float dz, float r) {
     float nz = *cz + dz;
     int col, row;
 
+    /* Cek gerak X — tambah cek 4 sudut diagonal */
     worldToCell(nx, *cz, &col, &row);
     if (!mapSolid(col, row)) {
-        worldToCell(nx + r, *cz, &col, &row); int cA = mapSolid(col, row);
-        worldToCell(nx - r, *cz, &col, &row); int cB = mapSolid(col, row);
-        if (!cA && !cB) *cx = nx;
+        worldToCell(nx + r, *cz,     &col, &row); int cA = mapSolid(col, row);
+        worldToCell(nx - r, *cz,     &col, &row); int cB = mapSolid(col, row);
+        worldToCell(nx + r, *cz + r, &col, &row); int cC = mapSolid(col, row);
+        worldToCell(nx + r, *cz - r, &col, &row); int cD = mapSolid(col, row);
+        worldToCell(nx - r, *cz + r, &col, &row); int cE = mapSolid(col, row);
+        worldToCell(nx - r, *cz - r, &col, &row); int cF = mapSolid(col, row);
+        if (!cA && !cB && !cC && !cD && !cE && !cF) *cx = nx;
     }
+
+    /* Cek gerak Z — tambah cek 4 sudut diagonal */
     worldToCell(*cx, nz, &col, &row);
     if (!mapSolid(col, row)) {
-        worldToCell(*cx, nz + r, &col, &row); int cA = mapSolid(col, row);
-        worldToCell(*cx, nz - r, &col, &row); int cB = mapSolid(col, row);
-        if (!cA && !cB) *cz = nz;
+        worldToCell(*cx,     nz + r, &col, &row); int cA = mapSolid(col, row);
+        worldToCell(*cx,     nz - r, &col, &row); int cB = mapSolid(col, row);
+        worldToCell(*cx + r, nz + r, &col, &row); int cC = mapSolid(col, row);
+        worldToCell(*cx - r, nz + r, &col, &row); int cD = mapSolid(col, row);
+        worldToCell(*cx + r, nz - r, &col, &row); int cE = mapSolid(col, row);
+        worldToCell(*cx - r, nz - r, &col, &row); int cF = mapSolid(col, row);
+        if (!cA && !cB && !cC && !cD && !cE && !cF) *cz = nz;
     }
 }
 
@@ -174,8 +278,31 @@ static void placeItems(void) {
     }
 }
 
+/* ============================================================
+ *  LOAD SEMUA TEKSTUR DARI FILE BMP
+ *  Dipanggil sekali saat pertama kali game dimulai.
+ *  Nama file harus ada di folder yang sama dengan executable.
+ * ============================================================ */
+static int gTexturesLoaded = 0;
+static void loadGameTextures(void) {
+    if (gTexturesLoaded) return;
+    gTexturesLoaded = 1;
+
+    /* Tembok: batu bata — ambil dari Google, simpan sebagai wall.bmp */
+    gTexWall  = uploadTexture(loadBMP("wall.bmp"));
+    /* Lantai: ubin / keramik — simpan sebagai floor.bmp             */
+    gTexFloor = uploadTexture(loadBMP("floor.bmp"));
+    /* Plafon: langit-langit — simpan sebagai ceiling.bmp            */
+    gTexCeil  = uploadTexture(loadBMP("ceiling.bmp"));
+
+    if (!gTexWall)  printf("[TEXTURE] wall.bmp tidak ditemukan, pakai warna solid.\n");
+    if (!gTexFloor) printf("[TEXTURE] floor.bmp tidak ditemukan, pakai warna solid.\n");
+    if (!gTexCeil)  printf("[TEXTURE] ceiling.bmp tidak ditemukan, pakai warna solid.\n");
+}
+
 void initGame(void) {
     srand((unsigned)time(NULL));
+    loadGameTextures();
 
     gPlayer.x                  = 1.5f * CELL_SIZE;
     gPlayer.z                  = 1.5f * CELL_SIZE;
@@ -279,7 +406,7 @@ void updatePlayer(float dt) {
     float frameScale = dt * TARGET_FPS;
     dx *= speed * frameScale;
     dz *= speed * frameScale;
-    moveWithCollision(&gPlayer.x, &gPlayer.z, dx, dz, 0.25f);
+    moveWithCollision(&gPlayer.x, &gPlayer.z, dx, dz, 0.35f);
 
     if (gPlayer.interactCooldown > 0) gPlayer.interactCooldown -= dt;
 
@@ -429,117 +556,292 @@ static void drawBox(float x, float y, float z,
     setColor3fv(col);
     float x0=x-sx/2, x1=x+sx/2, y0=y, y1=y+sy, z0=z-sz/2, z1=z+sz/2;
     glBegin(GL_QUADS);
-    /* Top   */ glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
-    /* Bot   */ glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y0,z0); glVertex3f(x0,y0,z0);
-    /* Front */ glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
-    /* Back  */ glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y0,z0); glVertex3f(x0,y0,z0);
-    /* Left  */ glVertex3f(x0,y0,z0); glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1); glVertex3f(x0,y1,z0);
-    /* Right */ glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y0,z0);
+    /* Top   */ glNormal3f( 0, 1, 0); glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
+    /* Bot   */ glNormal3f( 0,-1, 0); glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y0,z0); glVertex3f(x0,y0,z0);
+    /* Front */ glNormal3f( 0, 0, 1); glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
+    /* Back  */ glNormal3f( 0, 0,-1); glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y0,z0); glVertex3f(x0,y0,z0);
+    /* Left  */ glNormal3f(-1, 0, 0); glVertex3f(x0,y0,z0); glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1); glVertex3f(x0,y1,z0);
+    /* Right */ glNormal3f( 1, 0, 0); glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y0,z0);
     glEnd();
 }
 
-static void drawWallTexture(float wx, float wz, const float *baseCol) {
-    float x0=wx, x1=wx+CELL_SIZE, z0=wz, z1=wz+CELL_SIZE, eps=0.006f;
-    float mortar[3] = {baseCol[0]*0.55f, baseCol[1]*0.55f, baseCol[2]*0.55f};
-    float speck[3]  = {baseCol[0]*1.08f, baseCol[1]*1.08f, baseCol[2]*1.08f};
+/* ============================================================
+ *  SHADOW PROJECTION
+ *  Berdasarkan teknik planar shadow dari Praktikum 8.
+ *  l  = posisi sumber cahaya [x,y,z]
+ *  e  = titik di bidang lantai (y=0)
+ *  n  = normal bidang lantai (0,1,0)
+ * ============================================================ */
+static void applyShadowProjection(void) {
+    /* Sumber cahaya: directional dari atas → simulasikan dengan titik
+       sangat tinggi di tengah map supaya bayangan jatuh lurus ke bawah */
+    float lx = MAP_W*CELL_SIZE/2.0f;
+    float ly = 50.0f;   /* sangat tinggi = efek directional dari atas */
+    float lz = MAP_H*CELL_SIZE/2.0f;
 
-    glLineWidth(1.0f);
-    setColor3fv(mortar);
-    glBegin(GL_LINES);
-    for (float yy = 0.45f; yy < WALL_HEIGHT; yy += 0.45f) {
-        glVertex3f(x0,yy,z0-eps); glVertex3f(x1,yy,z0-eps);
-        glVertex3f(x0,yy,z1+eps); glVertex3f(x1,yy,z1+eps);
-        glVertex3f(x0-eps,yy,z0); glVertex3f(x0-eps,yy,z1);
-        glVertex3f(x1+eps,yy,z0); glVertex3f(x1+eps,yy,z1);
-    }
-    for (float yy = 0.0f; yy < WALL_HEIGHT; yy += 0.45f) {
-        float off = fmodf(yy/0.45f, 2.0f) < 1.0f ? 0.0f : 0.35f;
-        for (float p = 0.35f+off; p < CELL_SIZE; p += 0.7f) {
-            float yTop = yy+0.45f; if (yTop>WALL_HEIGHT) yTop=WALL_HEIGHT;
-            glVertex3f(x0+p,yy,z0-eps); glVertex3f(x0+p,yTop,z0-eps);
-            glVertex3f(x0+p,yy,z1+eps); glVertex3f(x0+p,yTop,z1+eps);
-            glVertex3f(x0-eps,yy,z0+p); glVertex3f(x0-eps,yTop,z0+p);
-            glVertex3f(x1+eps,yy,z0+p); glVertex3f(x1+eps,yTop,z0+p);
-        }
-    }
-    glEnd();
+    /* Bidang lantai: normal n=(0,1,0), titik e=(0,0,0) */
+    float nx=0, ny=1, nz_=0;
+    float ex=0, ey=0, ez=0;
 
-    setColor3fv(speck);
+    float d = nx*lx + ny*ly + nz_*lz;
+    float c = ex*nx + ey*ny + ez*nz_ - d;
+
+    float mat[16];
+    mat[0]  = lx*nx + c;  mat[4]  = ny*lx;        mat[8]  = nz_*lx;       mat[12] = -lx*c - lx*d;
+    mat[1]  = nx*ly;       mat[5]  = ly*ny + c;    mat[9]  = nz_*ly;       mat[13] = -ly*c - ly*d;
+    mat[2]  = nx*lz;       mat[6]  = ny*lz;        mat[10] = lz*nz_ + c;   mat[14] = -lz*c - lz*d;
+    mat[3]  = nx;          mat[7]  = ny;            mat[11] = nz_;           mat[15] = -d;
+
+    glMultMatrixf(mat);
+}
+
+/* Gambar bayangan obyek dengan warna gelap semi-transparan */
+static void beginShadow(void) {
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_LIGHTING);
+    /* Polygon offset: geser depth bayangan sedikit ke depan kamera
+       supaya tidak z-fight dengan lantai → tidak kedip-kedip */
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-1.0f, -1.0f);
+    glDepthMask(GL_FALSE);   /* tidak tulis depth, bayangan tidak tutup satu sama lain */
+    glColor4f(0.0f, 0.0f, 0.0f, 0.45f);
+}
+static void endShadow(void) {
+    glDepthMask(GL_TRUE);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDisable(GL_BLEND);
+    glEnable(GL_LIGHTING);
+}
+
+/* Versi drawBox tanpa warna (pakai warna yang sudah di-set) */
+static void drawBoxShadow(float x, float y, float z,
+                          float sx, float sy, float sz) {
+    float x0=x-sx/2, x1=x+sx/2, y0=y, y1=y+sy, z0=z-sz/2, z1=z+sz/2;
     glBegin(GL_QUADS);
-    for (int i = 0; i < 6; i++) {
-        float px = x0+0.22f+fmodf((float)(i*37),140.0f)/100.0f;
-        float pz = z0+0.18f+fmodf((float)(i*53),145.0f)/100.0f;
-        float py = 0.35f+fmodf((float)(i*29),175.0f)/100.0f;
-        float s  = 0.025f;
-        if (px < x1-0.1f) {
-            glVertex3f(px-s,py-s,z0-eps*1.5f); glVertex3f(px+s,py-s,z0-eps*1.5f);
-            glVertex3f(px+s,py+s,z0-eps*1.5f); glVertex3f(px-s,py+s,z0-eps*1.5f);
-        }
-        if (pz < z1-0.1f) {
-            glVertex3f(x1+eps*1.5f,py-s,pz-s); glVertex3f(x1+eps*1.5f,py-s,pz+s);
-            glVertex3f(x1+eps*1.5f,py+s,pz+s); glVertex3f(x1+eps*1.5f,py+s,pz-s);
-        }
-    }
+    glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
+    glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y0,z0); glVertex3f(x0,y0,z0);
+    glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
+    glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y0,z0); glVertex3f(x0,y0,z0);
+    glVertex3f(x0,y0,z0); glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1); glVertex3f(x0,y1,z0);
+    glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y0,z0);
     glEnd();
+}
+
+/* Forward declaration — definisi ada di bawah setelah setupCamera */
+static void drawTexturedQuad(GLuint texId, const float *fallbackCol,
+                              float x0, float y0, float z0,
+                              float x1, float y1, float z1,
+                              float x2, float y2, float z2,
+                              float x3, float y3, float z3,
+                              float nx, float ny, float nz,
+                              float uMax, float vMax);
+
+/* drawWallTexture digantikan oleh drawTexturedWallFaces di bawah */
+static void drawTexturedWallFaces(float wx, float wz) {
+    float x0=wx, x1=wx+CELL_SIZE;
+    float z0=wz, z1=wz+CELL_SIZE;
+    float y0=0,  y1=WALL_HEIGHT;
+    /* Tile tekstur: 1 bata per CELL_SIZE lebar, tingginya proporsional */
+    float uTile = 1.0f;
+    float vTile = WALL_HEIGHT / CELL_SIZE;
+
+    /* Sisi +Z (depan) */
+    drawTexturedQuad(gTexWall, COL_WALL_A,
+        x0,y0,z1, x1,y0,z1, x1,y1,z1, x0,y1,z1,
+        0,0,1, uTile, vTile);
+    /* Sisi -Z (belakang) */
+    drawTexturedQuad(gTexWall, COL_WALL_A,
+        x1,y0,z0, x0,y0,z0, x0,y1,z0, x1,y1,z0,
+        0,0,-1, uTile, vTile);
+    /* Sisi +X (kanan) */
+    drawTexturedQuad(gTexWall, COL_WALL_B,
+        x1,y0,z1, x1,y0,z0, x1,y1,z0, x1,y1,z1,
+        1,0,0, uTile, vTile);
+    /* Sisi -X (kiri) */
+    drawTexturedQuad(gTexWall, COL_WALL_B,
+        x0,y0,z0, x0,y0,z1, x0,y1,z1, x0,y1,z0,
+        -1,0,0, uTile, vTile);
 }
 
 /* ============================================================
  *  WORLD RENDERING
  * ============================================================ */
 void setupCamera(void) {
-    glMatrixMode(GL_PROJECTION); glLoadIdentity();
-    gluPerspective(FOV, (float)gWindowW/gWindowH, 0.05f, 100.0f);
-    glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
-
-    float yaw_r = gPlayer.yaw * 3.14159f / 180.0f;
-
-    /* Third person: geser kamera ke belakang player,
-       cek collision per 0.05 unit dari jauh ke dekat */
-    float camDist  = 1.5f;
-    float camHeight= 0.4f;
-    float r        = 0.15f; /* radius sudut kamera */
-
-    float finalDist = 0.3f;
-    for (float d = camDist; d > 0.3f; d -= 0.05f) {
-        float testX = gPlayer.x - cosf(yaw_r) * d;
-        float testZ = gPlayer.z - sinf(yaw_r) * d;
-        int col, row;
-        worldToCell(testX + r, testZ + r, &col, &row); if (mapSolid(col, row)) continue;
-        worldToCell(testX + r, testZ - r, &col, &row); if (mapSolid(col, row)) continue;
-        worldToCell(testX - r, testZ + r, &col, &row); if (mapSolid(col, row)) continue;
-        worldToCell(testX - r, testZ - r, &col, &row); if (mapSolid(col, row)) continue;
-        finalDist = d;
-        break;
-    }
-
-    float camX = gPlayer.x - cosf(yaw_r) * finalDist;
-    float camY = 1.10f + camHeight;
-    float camZ = gPlayer.z - sinf(yaw_r) * finalDist;
-
+    float yaw_r   = gPlayer.yaw   * 3.14159f / 180.0f;
     float pitch_r = gPlayer.pitch * 3.14159f / 180.0f;
 
-    // Target lihat = posisi player + offset pitch
-    float targetX = gPlayer.x + cosf(yaw_r) * cosf(pitch_r) * 2.0f;
-    float targetY = 0.8f      + sinf(pitch_r) * 2.0f;
-    float targetZ = gPlayer.z + sinf(yaw_r) * cosf(pitch_r) * 2.0f;
+    if (gFirstPerson) {
+        /* ============================================================
+         *  FIRST PERSON: kamera tepat di mata player
+         *  near plane diperkecil ke 0.02 agar dinding tidak kepotong
+         * ============================================================ */
+        glMatrixMode(GL_PROJECTION); glLoadIdentity();
+        gluPerspective(FOV, (float)gWindowW/gWindowH, 0.02f, 100.0f);
+        glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
 
-    gluLookAt(camX, camY, camZ,
-            targetX, targetY, targetZ,
-            0, 1, 0);
+        float eyeX = gPlayer.x;
+        float eyeY = 1.30f;          /* tinggi mata */
+        float eyeZ = gPlayer.z;
+
+        float targetX = eyeX + cosf(yaw_r) * cosf(pitch_r);
+        float targetY = eyeY + sinf(pitch_r);
+        float targetZ = eyeZ + sinf(yaw_r) * cosf(pitch_r);
+
+        gluLookAt(eyeX, eyeY, eyeZ,
+                  targetX, targetY, targetZ,
+                  0, 1, 0);
+
+        /* Point light di posisi mata player — w=1 agar menjadi point light
+           dengan attenuation, sehingga objek jauh dari player tampak gelap */
+        GLfloat lightPos[] = {0.0f, 1.0f, 0.0f, 0.0f}; /* directional dari atas */
+        glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+    } else {
+        /* ============================================================
+         *  THIRD PERSON: geser kamera ke belakang player,
+         *  cek collision per 0.05 unit dari jauh ke dekat
+         * ============================================================ */
+        glMatrixMode(GL_PROJECTION); glLoadIdentity();
+        gluPerspective(FOV, (float)gWindowW/gWindowH, 0.05f, 100.0f);
+        glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
+
+        float camDist   = 1.5f;
+        float camHeight = 0.4f;
+        float r         = 0.15f;
+
+        float finalDist = 0.3f;
+        for (float d = camDist; d > 0.3f; d -= 0.05f) {
+            float testX = gPlayer.x - cosf(yaw_r) * d;
+            float testZ = gPlayer.z - sinf(yaw_r) * d;
+            int col, row;
+            worldToCell(testX + r, testZ + r, &col, &row); if (mapSolid(col, row)) continue;
+            worldToCell(testX + r, testZ - r, &col, &row); if (mapSolid(col, row)) continue;
+            worldToCell(testX - r, testZ + r, &col, &row); if (mapSolid(col, row)) continue;
+            worldToCell(testX - r, testZ - r, &col, &row); if (mapSolid(col, row)) continue;
+            finalDist = d;
+            break;
+        }
+
+        float camX = gPlayer.x - cosf(yaw_r) * finalDist;
+        float camY = 1.10f + camHeight;
+        float camZ = gPlayer.z - sinf(yaw_r) * finalDist;
+
+        float targetX = gPlayer.x + cosf(yaw_r) * cosf(pitch_r) * 2.0f;
+        float targetY = 0.8f      + sinf(pitch_r) * 2.0f;
+        float targetZ = gPlayer.z + sinf(yaw_r) * cosf(pitch_r) * 2.0f;
+
+        gluLookAt(camX, camY, camZ,
+                  targetX, targetY, targetZ,
+                  0, 1, 0);
+
+        /* Point light di posisi player (badan), w=1 = point light */
+        GLfloat lightPos[] = {0.0f, 1.0f, 0.0f, 0.0f}; /* directional dari atas */
+        glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+    }
+}
+
+/* ============================================================
+ *  HELPER: gambar quad dengan atau tanpa tekstur
+ *  repeat = berapa kali tile tekstur diulang
+ * ============================================================ */
+static void drawTexturedQuad(GLuint texId, const float *fallbackCol,
+                              float x0,float y0,float z0,
+                              float x1,float y1,float z1,
+                              float x2,float y2,float z2,
+                              float x3,float y3,float z3,
+                              float nx,float ny,float nz,
+                              float uMax, float vMax) {
+    if (texId) {
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, texId);
+        glColor3f(1,1,1);
+    } else {
+        glDisable(GL_TEXTURE_2D);
+        setColor3fv(fallbackCol);
+    }
+    glBegin(GL_QUADS);
+    glNormal3f(nx,ny,nz);
+    glTexCoord2f(0,0);       glVertex3f(x0,y0,z0);
+    glTexCoord2f(uMax,0);    glVertex3f(x1,y1,z1);
+    glTexCoord2f(uMax,vMax); glVertex3f(x2,y2,z2);
+    glTexCoord2f(0,vMax);    glVertex3f(x3,y3,z3);
+    glEnd();
+    if (texId) glDisable(GL_TEXTURE_2D);
 }
 
 void renderFloorAndCeiling(void) {
-    glBegin(GL_QUADS);
-    setColor3fv(COL_FLOOR);
-    glVertex3f(0,0,0); glVertex3f(MAP_W*CELL_SIZE,0,0);
-    glVertex3f(MAP_W*CELL_SIZE,0,MAP_H*CELL_SIZE); glVertex3f(0,0,MAP_H*CELL_SIZE);
-    setColor3fv(COL_CEIL);
-    glVertex3f(0,WALL_HEIGHT,MAP_H*CELL_SIZE); glVertex3f(MAP_W*CELL_SIZE,WALL_HEIGHT,MAP_H*CELL_SIZE);
-    glVertex3f(MAP_W*CELL_SIZE,WALL_HEIGHT,0); glVertex3f(0,WALL_HEIGHT,0);
-    glEnd();
+    float W = MAP_W * CELL_SIZE;
+    float H = MAP_H * CELL_SIZE;
+    /* Ulangi tekstur tiap 1 CELL_SIZE agar tidak terlalu meregang */
+    float tileU = (float)MAP_W;
+    float tileV = (float)MAP_H;
+
+    /* Lantai */
+    drawTexturedQuad(gTexFloor, COL_FLOOR,
+        0,0,0,  W,0,0,  W,0,H,  0,0,H,
+        0,1,0,  tileU, tileV);
+
+    /* Plafon */
+    drawTexturedQuad(gTexCeil, COL_CEIL,
+        0,WALL_HEIGHT,H,  W,WALL_HEIGHT,H,  W,WALL_HEIGHT,0,  0,WALL_HEIGHT,0,
+        0,-1,0,  tileU, tileV);
 }
 
 void renderWalls(void) {
+    /* === BAYANGAN TEMBOK (strip gelap di dasar sisi terbuka) ===
+     * Setiap sisi tembok yang menghadap ruang terbuka digambar
+     * strip quad gelap di lantai, melebar keluar dari dasar tembok.
+     * Statis, tidak bergantung posisi kamera/cahaya → tidak bisa ilang. */
+    float sw = CELL_SIZE;       /* lebar strip = selebar sel */
+    float sd = 0.55f;           /* kedalaman bayangan dari kaki tembok */
+    float sy = 0.0f;            /* tepat di lantai, polygon offset yang handle z-fighting */
+
+    beginShadow();
+    glBegin(GL_QUADS);
+    for (int row = 0; row < MAP_H; row++) {
+        for (int col = 0; col < MAP_W; col++) {
+            if (!mapSolid(col, row)) continue;
+            float wx = col * CELL_SIZE;
+            float wz = row * CELL_SIZE;
+
+            /* Sisi +X: ada ruang terbuka di kanan */
+            if (!mapSolid(col+1, row)) {
+                float ex = wx + CELL_SIZE;
+                glVertex3f(ex,    sy, wz);
+                glVertex3f(ex,    sy, wz+sw);
+                glVertex3f(ex+sd, sy, wz+sw);
+                glVertex3f(ex+sd, sy, wz);
+            }
+            /* Sisi -X: ada ruang terbuka di kiri */
+            if (!mapSolid(col-1, row)) {
+                float ex = wx;
+                glVertex3f(ex,    sy, wz);
+                glVertex3f(ex,    sy, wz+sw);
+                glVertex3f(ex-sd, sy, wz+sw);
+                glVertex3f(ex-sd, sy, wz);
+            }
+            /* Sisi +Z: ada ruang terbuka di depan */
+            if (!mapSolid(col, row+1)) {
+                float ez = wz + CELL_SIZE;
+                glVertex3f(wx,    sy, ez);
+                glVertex3f(wx+sw, sy, ez);
+                glVertex3f(wx+sw, sy, ez+sd);
+                glVertex3f(wx,    sy, ez+sd);
+            }
+            /* Sisi -Z: ada ruang terbuka di belakang */
+            if (!mapSolid(col, row-1)) {
+                float ez = wz;
+                glVertex3f(wx,    sy, ez);
+                glVertex3f(wx+sw, sy, ez);
+                glVertex3f(wx+sw, sy, ez-sd);
+                glVertex3f(wx,    sy, ez-sd);
+            }
+        }
+    }
+    glEnd();
+    endShadow();
+
+    /* === TEMBOK ASLI === */
     for (int row = 0; row < MAP_H; row++) {
         for (int col = 0; col < MAP_W; col++) {
             int v = mapAt(col, row);
@@ -554,7 +856,7 @@ void renderWalls(void) {
                 drawBox(wx+CELL_SIZE*0.5f,WALL_HEIGHT*0.55f,wz+CELL_SIZE*0.5f-0.05f,0.6f,0.35f,0.05f,sc);
             } else {
                 drawBox(wx+CELL_SIZE*0.5f,0,wz+CELL_SIZE*0.5f,CELL_SIZE,WALL_HEIGHT,CELL_SIZE,wc);
-                drawWallTexture(wx, wz, wc);
+                drawTexturedWallFaces(wx, wz);
                 float stripe[3] = {wc[0]*0.7f, wc[1]*0.7f, wc[2]*0.7f};
                 drawBox(wx+CELL_SIZE*0.5f,WALL_HEIGHT-0.15f,wz+CELL_SIZE*0.5f,
                         CELL_SIZE+0.01f,0.15f,CELL_SIZE+0.01f,stripe);
@@ -568,6 +870,17 @@ void renderNotebook(Notebook *nb) {
     float bob = sinf(gTime*2.0f + nb->bobOffset)*0.07f;
     float rot  = fmodf(gTime*30.0f, 360.0f);
 
+    /* === BAYANGAN NOTEBOOK (flat kotak di lantai) === */
+    beginShadow();
+    glBegin(GL_QUADS);
+    glVertex3f(nb->x - 0.20f, 0.0f, nb->z - 0.20f);
+    glVertex3f(nb->x + 0.20f, 0.0f, nb->z - 0.20f);
+    glVertex3f(nb->x + 0.20f, 0.0f, nb->z + 0.20f);
+    glVertex3f(nb->x - 0.20f, 0.0f, nb->z + 0.20f);
+    glEnd();
+    endShadow();
+
+    /* === NOTEBOOK ASLI === */
     glPushMatrix();
     glTranslatef(nb->x, 0.4f+bob, nb->z);
     glRotatef(rot, 0,1,0);
@@ -598,12 +911,25 @@ void renderNotebook(Notebook *nb) {
 void renderPlayer(void) {
     float yaw_r = gPlayer.yaw * 3.14159f / 180.0f;
     (void)yaw_r;
-    glPushMatrix();
-    glTranslatef(gPlayer.x, 0.0f, gPlayer.z);
-    glRotatef(-gPlayer.yaw + 90.0f, 0,1,0);
 
     int isMoving = (kW || kS || kA || kD);
     float swing = isMoving ? sinf(gTime * 12.0f) : 0.0f;
+
+    /* === BAYANGAN PLAYER (flat kotak di lantai) === */
+    beginShadow();
+    glBegin(GL_QUADS);
+    glVertex3f(gPlayer.x - 0.35f, 0.0f, gPlayer.z - 0.25f);
+    glVertex3f(gPlayer.x + 0.35f, 0.0f, gPlayer.z - 0.25f);
+    glVertex3f(gPlayer.x + 0.35f, 0.0f, gPlayer.z + 0.25f);
+    glVertex3f(gPlayer.x - 0.35f, 0.0f, gPlayer.z + 0.25f);
+    glEnd();
+    endShadow();
+
+    /* === PLAYER ASLI: hanya di third person === */
+    if (gFirstPerson) return;
+    glPushMatrix();
+    glTranslatef(gPlayer.x, 0.0f, gPlayer.z);
+    glRotatef(-gPlayer.yaw + 90.0f, 0,1,0);
 
     /* Paha kiri (diam) + betis kiri (menekuk) */
     glPushMatrix();
@@ -655,6 +981,17 @@ void renderBaldi(void) {
     };
     float sway = sinf(gTime*8.0f)*0.03f;
 
+    /* === BAYANGAN BALDI (flat kotak di lantai) === */
+    beginShadow();
+    glBegin(GL_QUADS);
+    glVertex3f(gBaldi.x - 0.40f, 0.0f, gBaldi.z - 0.30f);
+    glVertex3f(gBaldi.x + 0.40f, 0.0f, gBaldi.z - 0.30f);
+    glVertex3f(gBaldi.x + 0.40f, 0.0f, gBaldi.z + 0.30f);
+    glVertex3f(gBaldi.x - 0.40f, 0.0f, gBaldi.z + 0.30f);
+    glEnd();
+    endShadow();
+
+    /* === BALDI ASLI === */
     glPushMatrix();
     glTranslatef(gBaldi.x, 0, gBaldi.z);
     glRotatef(180.0f - gBaldi.angle, 0,1,0);
@@ -711,6 +1048,17 @@ void renderItems(void) {
         float x = gItems[i].x, z = gItems[i].z;
         float rot = fmodf(gTime*40.0f + i*60.0f, 360.0f);
 
+        /* === BAYANGAN ITEM (flat kotak di lantai) === */
+        beginShadow();
+        glBegin(GL_QUADS);
+        glVertex3f(x - 0.18f, 0.0f, z - 0.18f);
+        glVertex3f(x + 0.18f, 0.0f, z - 0.18f);
+        glVertex3f(x + 0.18f, 0.0f, z + 0.18f);
+        glVertex3f(x - 0.18f, 0.0f, z + 0.18f);
+        glEnd();
+        endShadow();
+
+        /* === ITEM ASLI === */
         glPushMatrix();
         glTranslatef(x, 0.25f, z);
         glRotatef(rot, 0,1,0);
@@ -819,7 +1167,7 @@ void drawHUD(void) {
         float a = gTime < 4.0f ? 1.0f : 5.0f-gTime;
         glColor4f(0.8f,0.8f,0.8f,a);
         drawText2D(gWindowW-320, 50, "WASD=Gerak  Mouse=Lihat  E=Ambil",  GLUT_BITMAP_HELVETICA_12);
-        drawText2D(gWindowW-320, 32, "Shift=Sprint  B=B-Soda  ESC=Pause", GLUT_BITMAP_HELVETICA_12);
+        drawText2D(gWindowW-320, 32, "Shift=Sprint  B=B-Soda  V=1st/3rd  ESC=Pause", GLUT_BITMAP_HELVETICA_12);
     }
     end2D();
 }
@@ -912,6 +1260,7 @@ void drawInstructions(void) {
         "  E atau Space    -  Ambil / Interaksi",
         "  Shift            -  Lari (menguras stamina)",
         "  B               -  Gunakan B-Soda (pukul Baldi)",
+        "  V               -  Ganti First / Third Person",
         "  ESC              -  Pause",
         "","ITEM:",
         "  CYAN   = Energy Drink (isi stamina)",

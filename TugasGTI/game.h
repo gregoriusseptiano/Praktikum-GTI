@@ -1,5 +1,16 @@
 #pragma once
 
+/* Fix MinGW UCRT64: quick_exit / at_quick_exit conflict dengan C++ stdlib */
+#if defined(__MINGW32__) || defined(__MINGW64__)
+#  ifndef quick_exit
+#    define quick_exit(c) exit(c)
+#  endif
+#  ifndef at_quick_exit
+#    define at_quick_exit(f) ((void)0)
+#  endif
+#endif
+
+
 /*
  * ============================================================
  *  BALDI'S BASICS 3D - Header
@@ -20,7 +31,7 @@
 #define WINDOW_W        1280
 #define WINDOW_H        720
 #define FOV             75.0f
-#define MOVE_SPEED      0.08f
+#define MOVE_SPEED      0.06f
 #define BALDI_SPEED_BASE 0.025f
 #define MOUSE_SENS      0.15f
 #define TARGET_FPS      60.0f
@@ -28,7 +39,7 @@
 #define MAP_W           16
 #define MAP_H           16
 #define CELL_SIZE       2.0f
-#define WALL_HEIGHT     2.5f
+#define WALL_HEIGHT     3.0f
 
 #define MAX_NOTEBOOKS   7
 #define MAX_ITEMS       5
@@ -124,6 +135,7 @@ extern float       gTime;
 extern int         gMenuSel;
 extern float       gFlashTimer;
 extern int         gMouseCaptured;
+extern int         gFirstPerson;   /* 0 = third person, 1 = first person */
 
 /* Key states (defined in main.cpp) */
 extern int kW, kA, kS, kD, kShift, kE, kSpace;

@@ -13,6 +13,7 @@
  *   Mouse                  - Look around
  *   E or Space             - Interact / Pick up
  *   B                      - Use B-Soda
+ *   V                      - Toggle First / Third Person
  *   Shift                  - Sprint
  *   ESC                    - Pause / Quit
  * ============================================================
@@ -106,6 +107,15 @@ static void keyboard(unsigned char key, int x, int y) {
     case 'd': case 'D': kD = 1; break;
     case 'e': case 'E': kE = 1; break;
     case ' ':           kSpace = 1; break;
+
+    case 'v': case 'V':
+        if (gState == STATE_PLAYING) {
+            gFirstPerson = !gFirstPerson;
+            snprintf(gHudMsg, sizeof(gHudMsg),
+                     gFirstPerson ? "Mode: First Person" : "Mode: Third Person");
+            gHudMsgTimer = 2.0f;
+        }
+        break;
 
     case 'b': case 'B':
         if (gState == STATE_PLAYING && gPlayer.bsodaCount > 0 && !gCloud.active) {
@@ -248,22 +258,25 @@ int main(int argc, char **argv) {
     glClearColor(0.05f, 0.05f, 0.10f, 1.0f);
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
-    /* Fog */
+    /* Fog tipis — deket player terang normal, lorong jauh sedikit gelap.
+       Mulai dari 6 unit, gelap penuh di 22 unit. Efek subtle, tidak dramatis. */
     glEnable(GL_FOG);
-    GLfloat fogColor[4] = {0.05f, 0.05f, 0.08f, 1.0f};
+    GLfloat fogColor[4] = {0.06f, 0.06f, 0.08f, 1.0f};
     glFogfv(GL_FOG_COLOR, fogColor);
-    glFogf(GL_FOG_DENSITY, 0.05f);
-    glFogi(GL_FOG_MODE, GL_EXP2);
+    glFogf(GL_FOG_START,   6.0f);
+    glFogf(GL_FOG_END,    22.0f);
+    glFogi(GL_FOG_MODE, GL_LINEAR);
 
-    /* Lighting */
+    /* Lighting normal persis seperti aslinya */
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-    GLfloat ambient[]  = {0.45f, 0.40f, 0.35f, 1.0f};
-    GLfloat diffuse[]  = {0.70f, 0.65f, 0.60f, 1.0f};
-    GLfloat lightPos[] = {MAP_W*CELL_SIZE/2, WALL_HEIGHT-0.1f,
-                          MAP_H*CELL_SIZE/2, 1.0f};
+    GLfloat ambient[]  = {0.50f, 0.47f, 0.43f, 1.0f};
+    GLfloat diffuse[]  = {0.65f, 0.62f, 0.58f, 1.0f};
+    GLfloat specular[] = {0.0f,  0.0f,  0.0f,  1.0f};
+    GLfloat lightPos[] = {0.0f,  1.0f,  0.0f,  0.0f};
     glLightfv(GL_LIGHT0, GL_AMBIENT,  ambient);
     glLightfv(GL_LIGHT0, GL_DIFFUSE,  diffuse);
+    glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glEnable(GL_COLOR_MATERIAL);
     glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE);
