@@ -9,7 +9,7 @@
 using namespace std;
 
 /* ============================================================
- *  BMP LOADER (dari Praktikum 7)
+ *  BMP LOADER 
  * ============================================================ */
 struct BMPImage {
     unsigned char *pixels;
@@ -280,19 +280,17 @@ static void placeItems(void) {
 
 /* ============================================================
  *  LOAD SEMUA TEKSTUR DARI FILE BMP
- *  Dipanggil sekali saat pertama kali game dimulai.
- *  Nama file harus ada di folder yang sama dengan executable.
  * ============================================================ */
 static int gTexturesLoaded = 0;
 static void loadGameTextures(void) {
     if (gTexturesLoaded) return;
     gTexturesLoaded = 1;
 
-    /* Tembok: batu bata — ambil dari Google, simpan sebagai wall.bmp */
+    /* Tembok */
     gTexWall  = uploadTexture(loadBMP("wall.bmp"));
-    /* Lantai: ubin / keramik — simpan sebagai floor.bmp             */
+    /* Lantai */
     gTexFloor = uploadTexture(loadBMP("floor.bmp"));
-    /* Plafon: langit-langit — simpan sebagai ceiling.bmp            */
+    /* Plafon */
     gTexCeil  = uploadTexture(loadBMP("ceiling.bmp"));
 
     if (!gTexWall)  printf("[TEXTURE] wall.bmp tidak ditemukan, pakai warna solid.\n");
@@ -567,16 +565,10 @@ static void drawBox(float x, float y, float z,
 
 /* ============================================================
  *  SHADOW PROJECTION
- *  Berdasarkan teknik planar shadow dari Praktikum 8.
- *  l  = posisi sumber cahaya [x,y,z]
- *  e  = titik di bidang lantai (y=0)
- *  n  = normal bidang lantai (0,1,0)
  * ============================================================ */
 static void applyShadowProjection(void) {
-    /* Sumber cahaya: directional dari atas → simulasikan dengan titik
-       sangat tinggi di tengah map supaya bayangan jatuh lurus ke bawah */
     float lx = MAP_W*CELL_SIZE/2.0f;
-    float ly = 50.0f;   /* sangat tinggi = efek directional dari atas */
+    float ly = 50.0f;   
     float lz = MAP_H*CELL_SIZE/2.0f;
 
     /* Bidang lantai: normal n=(0,1,0), titik e=(0,0,0) */
@@ -595,16 +587,13 @@ static void applyShadowProjection(void) {
     glMultMatrixf(mat);
 }
 
-/* Gambar bayangan obyek dengan warna gelap semi-transparan */
 static void beginShadow(void) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_LIGHTING);
-    /* Polygon offset: geser depth bayangan sedikit ke depan kamera
-       supaya tidak z-fight dengan lantai → tidak kedip-kedip */
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(-1.0f, -1.0f);
-    glDepthMask(GL_FALSE);   /* tidak tulis depth, bayangan tidak tutup satu sama lain */
+    glDepthMask(GL_FALSE);   
     glColor4f(0.0f, 0.0f, 0.0f, 0.45f);
 }
 static void endShadow(void) {
@@ -614,7 +603,7 @@ static void endShadow(void) {
     glEnable(GL_LIGHTING);
 }
 
-/* Versi drawBox tanpa warna (pakai warna yang sudah di-set) */
+/* Versi drawBox */
 static void drawBoxShadow(float x, float y, float z,
                           float sx, float sy, float sz) {
     float x0=x-sx/2, x1=x+sx/2, y0=y, y1=y+sy, z0=z-sz/2, z1=z+sz/2;
@@ -628,7 +617,7 @@ static void drawBoxShadow(float x, float y, float z,
     glEnd();
 }
 
-/* Forward declaration — definisi ada di bawah setelah setupCamera */
+/* Forward declaration*/
 static void drawTexturedQuad(GLuint texId, const float *fallbackCol,
                               float x0, float y0, float z0,
                               float x1, float y1, float z1,
