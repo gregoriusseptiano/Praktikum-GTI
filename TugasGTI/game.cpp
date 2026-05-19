@@ -592,7 +592,9 @@ static void beginShadow(void) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_LIGHTING);
     glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-1.0f, -1.0f);
+    /* Nilai positif mendorong shadow sedikit "lebih jauh" dari kamera
+       sehingga selalu render di atas lantai tanpa Z-fighting */
+    glPolygonOffset(1.0f, 1.0f);
     glDepthMask(GL_FALSE);   
     glColor4f(0.0f, 0.0f, 0.0f, 0.45f);
 }
@@ -666,7 +668,7 @@ void setupCamera(void) {
          *  near plane diperkecil ke 0.02 agar dinding tidak kepotong
          * ============================================================ */
         glMatrixMode(GL_PROJECTION); glLoadIdentity();
-        gluPerspective(FOV, (float)gWindowW/gWindowH, 0.02f, 100.0f);
+        gluPerspective(FOV, (float)gWindowW/gWindowH, 0.05f, 100.0f);
         glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
 
         float eyeX = gPlayer.x;
@@ -844,8 +846,10 @@ void renderWalls(void) {
                 float sc[3] = {0.9f,0.9f,0.1f};
                 drawBox(wx+CELL_SIZE*0.5f,WALL_HEIGHT*0.55f,wz+CELL_SIZE*0.5f-0.05f,0.6f,0.35f,0.05f,sc);
             } else {
-                drawBox(wx+CELL_SIZE*0.5f,0,wz+CELL_SIZE*0.5f,CELL_SIZE,WALL_HEIGHT,CELL_SIZE,wc);
+                /* Hanya gambar face bertekstur (bukan drawBox solid) agar tidak
+                   terjadi Z-fighting antara geometry yang overlap persis */
                 drawTexturedWallFaces(wx, wz);
+                /* Top cap & stripe — posisi sedikit di atas face tekstur */
                 float stripe[3] = {wc[0]*0.7f, wc[1]*0.7f, wc[2]*0.7f};
                 drawBox(wx+CELL_SIZE*0.5f,WALL_HEIGHT-0.15f,wz+CELL_SIZE*0.5f,
                         CELL_SIZE+0.01f,0.15f,CELL_SIZE+0.01f,stripe);
